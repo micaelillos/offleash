@@ -1,0 +1,50 @@
+{
+  "name": "offleash",
+  "version": "1.0.0",
+  "description": "Run AI agents autonomously in a sandboxed Docker container",
+  "type": "module",
+  "bin": {
+    "offleash": "dist/cli.js"
+  },
+  "files": [
+    "dist/"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "test:ci": "vitest run",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "claude",
+    "ai",
+    "agent",
+    "sandbox",
+    "docker",
+    "autonomous",
+    "claude-code",
+    "anthropic",
+    "llm",
+    "offleash"
+  ],
+  "author": "your name",
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^5.4.1",
+    "commander": "^13.1.0",
+    "conf": "^13.1.0",
+    "nanoid": "^5.1.5",
+    "ora": "^8.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "tsup": "^8.4.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.1"
+  }
+}

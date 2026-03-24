@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <title>offleash — AI coding agents, off the leash</title>
+  <meta name="description" content="Run AI coding agents autonomously in sandboxed Docker containers. Cross-platform, auto-authenticating, zero-config. Currently supports Claude Code.">
+  <meta property="og:title" content="offleash — AI coding agents, off the leash">
+  <meta property="og:description" content="Run AI coding agents autonomously in sandboxed Docker containers. Currently supports Claude Code.">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐕</text></svg>">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #0a0a0f;
+      --bg-card: #111119;
+      --bg-code: #0d0d15;
+      --border: #1a1a28;
+      --text: #e0e0e8;
+      --text-dim: #6b6b80;
+      --accent: #00ffd5;
+      --accent2: #7b61ff;
+      --amber: #ffb347;
+      --mono: "SF Mono", "Fira Code", "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+      --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", Roboto, sans-serif;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* Background glow orbs */
+    body::before, body::after {
+      content: "";
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: 0.15;
+      pointer-events: none;
+      z-index: -1;
+    }
+    body::before {
+      width: 600px; height: 600px;
+      background: var(--accent);
+      top: -200px; left: -100px;
+    }
+    body::after {
+      width: 500px; height: 500px;
+      background: var(--accent2);
+      bottom: -100px; right: -100px;
+    }
+
+    /* Header */
+    header {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      padding: 1rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(10, 10, 15, 0.8);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .logo {
+      font-family: var(--mono);
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .logo span { color: var(--text-dim); }
+
+    .header-links { display: flex; gap: 1.5rem; align-items: center; }
+
+    .header-links a {
+      color: var(--text-dim);
+      text-decoration: none;
+      font-size: 0.9rem;
+      transition: color 0.2s;
+    }
+    .header-links a:hover { color: var(--text); }
+
+    .gh-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 1rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.85rem;
+      color: var(--text) !important;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .gh-btn:hover { border-color: var(--accent); background: rgba(0, 255, 213, 0.05); }
+
+    /* Sections */
+    section { padding: 6rem 2rem; max-width: 1100px; margin: 0 auto; }
+
+    /* Hero */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      padding-top: 5rem;
+    }
+
+    .hero-title {
+      font-family: var(--mono);
+      font-size: clamp(3.5rem, 10vw, 7rem);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      filter: drop-shadow(0 0 40px rgba(0, 255, 213, 0.3));
+      animation: glow-pulse 3s ease-in-out infinite alternate;
+    }
+
+    @keyframes glow-pulse {
+      from { filter: drop-shadow(0 0 40px rgba(0, 255, 213, 0.3)); }
+      to   { filter: drop-shadow(0 0 60px rgba(0, 255, 213, 0.5)); }
+    }
+
+    .hero-tagline {
+      font-size: clamp(1.1rem, 3vw, 1.5rem);
+      color: var(--text-dim);
+      margin-top: 0.5rem;
+      font-weight: 400;
+    }
+
+    .hero-desc {
+      font-size: 1.1rem;
+      color: var(--text-dim);
+      max-width: 600px;
+      margin: 1.5rem auto 2.5rem;
+    }
+
+    /* Terminal blocks */
+    .terminal {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      text-align: left;
+      width: 100%;
+      max-width: 650px;
+    }
+
+    .terminal-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0.75rem 1rem;
+      background: rgba(255, 255, 255, 0.03);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .terminal-dot {
+      width: 12px; height: 12px;
+      border-radius: 50%;
+    }
+    .terminal-dot.r { background: #ff5f57; }
+    .terminal-dot.y { background: #febc2e; }
+    .terminal-dot.g { background: #28c840; }
+
+    .terminal-title {
+      flex: 1;
+      text-align: center;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--text-dim);
+    }
+
+    .terminal-body {
+      padding: 1.25rem 1.5rem;
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      line-height: 1.8;
+      overflow-x: auto;
+    }
+
+    .terminal-line { white-space: nowrap; }
+
+    .prompt { color: var(--accent); user-select: none; }
+    .cmd { color: var(--text); }
+    .flag { color: var(--accent2); }
+    .str { color: var(--amber); }
+    .comment { color: var(--text-dim); }
+
+    .copy-btn {
+      position: absolute;
+      top: 0.75rem; right: 0.75rem;
+      background: var(--border);
+      border: none;
+      color: var(--text-dim);
+      padding: 0.3rem 0.6rem;
+      border-radius: 4px;
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .copy-btn:hover { background: var(--accent); color: var(--bg); }
+
+    .terminal-wrapper { position: relative; display: inline-block; width: 100%; max-width: 650px; }
+
+    /* Typing animation */
+    .typed-cursor {
+      display: inline-block;
+      width: 8px; height: 1.1em;
+      background: var(--accent);
+      margin-left: 2px;
+      vertical-align: text-bottom;
+      animation: blink 1s step-end infinite;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    /* Section titles */
+    .section-label {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      margin-bottom: 0.5rem;
+    }
+
+    .section-title {
+      font-size: clamp(1.8rem, 4vw, 2.5rem);
+      font-weight: 700;
+      margin-bottom: 1rem;
+    }
+
+    .section-desc {
+      color: var(--text-dim);
+      max-width: 600px;
+      margin-bottom: 3rem;
+    }
+
+    /* Features grid */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .feature-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.75rem;
+      transition: border-color 0.3s, transform 0.3s, box-shadow 0.3s;
+    }
+
+    .feature-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(0, 255, 213, 0.08);
+    }
+
+    .feature-icon {
+      font-size: 1.5rem;
+      margin-bottom: 0.75rem;
+      display: inline-block;
+    }
+
+    .feature-card h3 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin-bottom: 0.4rem;
+    }
+
+    .feature-card p {
+      font-size: 0.9rem;
+      color: var(--text-dim);
+      line-height: 1.5;
+    }
+
+    /* Quick start */
+    .quickstart-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+    }
+
+    .quickstart-grid h3 {
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      color: var(--accent);
+      margin-bottom: 1rem;
+    }
+
+    /* How it works */
+    .steps {
+      position: relative;
+      padding-left: 3rem;
+    }
+
+    .steps::before {
+      content: "";
+      position: absolute;
+      left: 15px;
+      top: 0; bottom: 0;
+      width: 2px;
+      background: linear-gradient(to bottom, var(--accent), var(--accent2));
+      opacity: 0.3;
+    }
+
+    .step {
+      position: relative;
+      margin-bottom: 2.5rem;
+    }
+
+    .step::before {
+      content: attr(data-step);
+      position: absolute;
+      left: -3rem;
+      top: 0;
+      width: 32px; height: 32px;
+      background: var(--bg);
+      border: 2px solid var(--accent);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .step h3 {
+      font-size: 1.1rem;
+      margin-bottom: 0.3rem;
+    }
+
+    .step p {
+      color: var(--text-dim);
+      font-size: 0.95rem;
+    }
+
+    /* CLI Reference */
+    .ref-table {
+      width: 100%;
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      border-collapse: collapse;
+    }
+
+    .ref-table th {
+      text-align: left;
+      padding: 0.75rem 1rem;
+      color: var(--accent);
+      border-bottom: 1px solid var(--border);
+      font-weight: 600;
+    }
+
+    .ref-table td {
+      padding: 0.6rem 1rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    }
+
+    .ref-table tr:hover td { background: rgba(255, 255, 255, 0.02); }
+
+    .ref-table td:first-child { color: var(--amber); white-space: nowrap; }
+
+    .ref-section { margin-bottom: 3rem; }
+
+    .ref-section h3 {
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      color: var(--accent2);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 1rem;
+    }
+
+    .ref-wrapper {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: auto;
+      padding: 0.5rem 0;
+    }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      padding: 4rem 2rem;
+      border-top: 1px solid var(--border);
+      color: var(--text-dim);
+      font-size: 0.9rem;
+    }
+
+    footer a { color: var(--accent); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+
+    .footer-tagline {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      margin-top: 1rem;
+    }
+
+    .footer-links { display: flex; justify-content: center; gap: 2rem; margin-bottom: 1rem; }
+
+    /* Supported tools */
+    .tools-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1.25rem;
+      margin-top: 2rem;
+    }
+
+    .tool-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      text-align: center;
+      position: relative;
+      transition: border-color 0.3s, transform 0.3s;
+    }
+
+    .tool-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+
+    .tool-card.active { border-color: var(--accent); }
+
+    .tool-card.coming-soon { opacity: 0.45; }
+
+    .tool-badge {
+      position: absolute;
+      top: -0.5rem; right: -0.5rem;
+      font-family: var(--mono);
+      font-size: 0.6rem;
+      padding: 0.2rem 0.5rem;
+      border-radius: 999px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .tool-badge.live { background: var(--accent); color: var(--bg); }
+    .tool-badge.soon { background: var(--border); color: var(--text-dim); }
+
+    .tool-card h3 { font-size: 1.1rem; margin-top: 0.75rem; margin-bottom: 0.3rem; }
+    .tool-card p { font-size: 0.8rem; color: var(--text-dim); }
+    .tool-icon { font-size: 2rem; }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      section { padding: 4rem 1.25rem; }
+      .quickstart-grid { grid-template-columns: 1fr; }
+      .features-grid { grid-template-columns: 1fr; }
+      header { padding: 0.75rem 1rem; }
+      .header-links a:not(.gh-btn) { display: none; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+      html { scroll-behavior: auto; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <a href="#" class="logo">offleash<span>.dev</span></a>
+  <div class="header-links">
+    <a href="#tools">Agents</a>
+    <a href="#features">Features</a>
+    <a href="#quickstart">Quick Start</a>
+    <a href="#how-it-works">How It Works</a>
+    <a href="https://github.com/micaelillos/offleash" class="gh-btn" target="_blank" rel="noopener">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      GitHub
+    </a>
+  </div>
+</header>
+
+<main>
+  <!-- Hero -->
+  <section class="hero">
+    <h1 class="hero-title">offleash</h1>
+    <p class="hero-tagline">AI coding agents, off the leash.</p>
+    <p class="hero-desc">
+      Run AI coding agents autonomously in sandboxed Docker containers.
+      Full power, zero risk. Cross-platform, auto-authenticating, zero-config.
+    </p>
+    <div class="terminal-wrapper">
+      <div class="terminal">
+        <div class="terminal-bar">
+          <div class="terminal-dot r"></div>
+          <div class="terminal-dot y"></div>
+          <div class="terminal-dot g"></div>
+          <div class="terminal-title">Terminal</div>
+        </div>
+        <div class="terminal-body">
+          <div class="terminal-line"><span class="prompt">$ </span><span class="cmd">npm install -g </span><span class="str">offleash</span></div>
+          <div class="terminal-line" style="margin-top: 1rem"><span class="prompt">$ </span><span class="cmd">cd </span><span class="str">my-project</span></div>
+          <div class="terminal-line"><span class="prompt">$ </span><span class="cmd">offleash </span><span class="str" id="typed-text"></span><span class="typed-cursor"></span></div>
+        </div>
+      </div>
+      <button class="copy-btn" onclick="copyText('npm install -g offleash', this)" aria-label="Copy install command">Copy</button>
+    </div>
+  </section>
+
+  <!-- Supported Tools -->
+  <section id="tools">
+    <div class="section-label">Supported Tools</div>
+    <h2 class="section-title">One sandbox, any AI agent.</h2>
+    <p class="section-desc">offleash is built to support multiple AI coding agents. Claude Code is first, with more on the way.</p>
+
+    <div class="tools-grid">
+      <div class="tool-card active">
+        <span class="tool-badge live">Live</span>
+        <div class="tool-icon">&#x1F7E0;</div>
+        <h3>Claude Code</h3>
+        <p>Anthropic's CLI agent with full autonomous mode</p>
+      </div>
+      <div class="tool-card coming-soon">
+        <span class="tool-badge soon">Soon</span>
+        <div class="tool-icon">&#x1F7E2;</div>
+        <h3>Codex CLI</h3>
+        <p>OpenAI's coding agent</p>
+      </div>
+      <div class="tool-card coming-soon">
+        <span class="tool-badge soon">Soon</span>
+        <div class="tool-icon">&#x1F535;</div>
+        <h3>Gemini CLI</h3>
+        <p>Google's coding agent</p>
+      </div>
+      <div class="tool-card coming-soon">
+        <span class="tool-badge soon">Soon</span>
+        <div class="tool-icon">&#x26AA;</div>
+        <h3>Aider</h3>
+        <p>Open-source AI pair programming</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section id="features">
+    <div class="section-label">Features</div>
+    <h2 class="section-title">Everything you need, nothing you don't.</h2>
+    <p class="section-desc">offleash handles Docker, authentication, permissions, and configuration so you can just type and go.</p>
+
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">&#x1F433;</div>
+        <h3>Sandboxed Isolation</h3>
+        <p>Your AI agent runs inside a fresh Docker container. Your host machine stays safe. Changes are restricted to your project directory.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#x1F310;</div>
+        <h3>Cross-Platform</h3>
+        <p>Works on macOS, Linux, and Windows. Handles path translation, TTY detection, and Docker differences automatically.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#x1F511;</div>
+        <h3>Auto-Authentication</h3>
+        <p>Extracts credentials from your OS keychain automatically. No manual config. Also supports API keys for CI/headless environments.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#x26A1;</div>
+        <h3>Smart Caching</h3>
+        <p>Docker images are tagged by content hash. Rebuilds only when something changes. First run takes seconds, reruns are instant.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#x1F6E1;</div>
+        <h3>Resource Limits</h3>
+        <p>Control CPU, memory, and timeout. Run with <code>--no-network</code> for full network isolation. You set the boundaries.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#x1F4BE;</div>
+        <h3>Auto-Commit</h3>
+        <p>Pass <code>--auto-commit</code> and changes are committed to git when the agent finishes. Add <code>--commit-message</code> for custom messages.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#x1F4C4;</div>
+        <h3>File Context</h3>
+        <p>Pass PDFs, docs, or images with <code>--file</code>. The agent reads them as initial context. Combine with a prompt for targeted work.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#x1F916;</div>
+        <h3>CI/CD Ready</h3>
+        <p>Non-interactive <code>--print</code> mode for pipelines. Pipe prompts via stdin. Perfect for automated workflows.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#x2699;</div>
+        <h3>Persistent Config</h3>
+        <p>Save your preferred defaults with <code>offleash config set</code>. Memory limits, model, network mode, and more.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Quick Start -->
+  <section id="quickstart">
+    <div class="section-label">Quick Start</div>
+    <h2 class="section-title">Up and running in 30 seconds.</h2>
+
+    <div class="quickstart-grid">
+      <div>
+        <h3>// Install</h3>
+        <div class="terminal-wrapper">
+          <div class="terminal">
+            <div class="terminal-bar">
+              <div class="terminal-dot r"></div>
+              <div class="terminal-dot y"></div>
+              <div class="terminal-dot g"></div>
+              <div class="terminal-title">Install</div>
+            </div>
+            <div class="terminal-body">
+              <div class="terminal-line"><span class="prompt">$ </span><span class="cmd">npm install -g offleash</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <h3>// Usage</h3>
+        <div class="terminal">
+          <div class="terminal-bar">
+            <div class="terminal-dot r"></div>
+            <div class="terminal-dot y"></div>
+            <div class="terminal-dot g"></div>
+            <div class="terminal-title">Usage</div>
+          </div>
+          <div class="terminal-body">
+            <div class="terminal-line"><span class="comment"># Interactive session</span></div>
+            <div class="terminal-line"><span class="prompt">$ </span><span class="cmd">offleash</span></div>
+            <div class="terminal-line" style="margin-top: 0.75rem"><span class="comment"># With a prompt</span></div>
+            <div class="terminal-line"><span class="prompt">$ </span><span class="cmd">offleash </span><span class="str">"fix the login bug"</span></div>
+            <div class="terminal-line" style="margin-top: 0.75rem"><span class="comment"># With a file</span></div>
+            <div class="terminal-line"><span class="prompt">$ </span><span class="cmd">offleash </span><span class="flag">--file </span><span class="str">spec.pdf</span><span class="cmd"> </span><span class="str">"implement this"</span></div>
+            <div class="terminal-line" style="margin-top: 0.75rem"><span class="comment"># Auto-commit when done</span></div>
+            <div class="terminal-line"><span class="prompt">$ </span><span class="cmd">offleash </span><span class="flag">--auto-commit </span><span class="str">"refactor auth"</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- How It Works -->
+  <section id="how-it-works">
+    <div class="section-label">How It Works</div>
+    <h2 class="section-title">Simple under the hood.</h2>
+    <p class="section-desc">Five steps from command to autonomous coding. All automatic.</p>
+
+    <div class="steps">
+      <div class="step" data-step="1">
+        <h3>Build a minimal Docker image</h3>
+        <p>A lightweight container image with your AI agent pre-installed. Cached by content hash for instant reruns.</p>
+      </div>
+      <div class="step" data-step="2">
+        <h3>Mount your project</h3>
+        <p>Your current directory becomes <code>/workspace</code> inside the container. Changes sync in real-time via Docker volumes.</p>
+      </div>
+      <div class="step" data-step="3">
+        <h3>Inject credentials securely</h3>
+        <p>Auth tokens are extracted from your OS keychain and passed as environment variables. Nothing written to disk.</p>
+      </div>
+      <div class="step" data-step="4">
+        <h3>Launch with full autonomy</h3>
+        <p>The agent runs with all permission checks bypassed. Trust prompts, safety dialogs &mdash; all pre-accepted so it can work uninterrupted.</p>
+      </div>
+      <div class="step" data-step="5">
+        <h3>Run as non-root user</h3>
+        <p>Inside the container, the agent operates as an unprivileged user. Sandboxed, isolated, safe.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- CLI Reference -->
+  <section id="reference">
+    <div class="section-label">Reference</div>
+    <h2 class="section-title">Full CLI reference.</h2>
+
+    <div class="ref-section">
+      <h3>Options</h3>
+      <div class="ref-wrapper">
+        <table class="ref-table">
+          <thead><tr><th>Flag</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td>-p, --prompt &lt;text&gt;</td><td>Initial prompt for the agent</td></tr>
+            <tr><td>-f, --file &lt;path&gt;</td><td>File for the agent to read as initial context</td></tr>
+            <tr><td>--print</td><td>Non-interactive mode (print output and exit)</td></tr>
+            <tr><td>-c, --continue</td><td>Continue last session</td></tr>
+            <tr><td>--model &lt;model&gt;</td><td>Model to use</td></tr>
+            <tr><td>--cpus &lt;n&gt;</td><td>CPU limit for container</td></tr>
+            <tr><td>--memory &lt;size&gt;</td><td>Memory limit (e.g., "4g")</td></tr>
+            <tr><td>--timeout &lt;duration&gt;</td><td>Auto-kill after duration (e.g., "30m")</td></tr>
+            <tr><td>--no-network</td><td>Disable network in container</td></tr>
+            <tr><td>--read-only</td><td>Mount workspace as read-only</td></tr>
+            <tr><td>--mount &lt;spec&gt;</td><td>Extra volume mount (repeatable)</td></tr>
+            <tr><td>--env &lt;KEY=VAL&gt;</td><td>Extra environment variable (repeatable)</td></tr>
+            <tr><td>--auto-commit</td><td>Auto-commit changes to git when done</td></tr>
+            <tr><td>--commit-message &lt;msg&gt;</td><td>Custom commit message (implies --auto-commit)</td></tr>
+            <tr><td>--image &lt;name&gt;</td><td>Custom Docker image</td></tr>
+            <tr><td>--workdir &lt;path&gt;</td><td>Override working directory</td></tr>
+            <tr><td>--rebuild</td><td>Force Docker image rebuild</td></tr>
+            <tr><td>-v, --verbose</td><td>Verbose output</td></tr>
+            <tr><td>--debug</td><td>Debug output</td></tr>
+            <tr><td>-q, --quiet</td><td>Minimal output</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="ref-section">
+      <h3>Commands</h3>
+      <div class="ref-wrapper">
+        <table class="ref-table">
+          <thead><tr><th>Command</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td>offleash auth</td><td>Show authentication status</td></tr>
+            <tr><td>offleash auth login</td><td>Authenticate with your agent</td></tr>
+            <tr><td>offleash auth token</td><td>Set up API token for headless/CI use</td></tr>
+            <tr><td>offleash config list</td><td>Show all configuration values</td></tr>
+            <tr><td>offleash config set &lt;key&gt; &lt;val&gt;</td><td>Set a configuration value</td></tr>
+            <tr><td>offleash config get &lt;key&gt;</td><td>Get a configuration value</td></tr>
+            <tr><td>offleash config reset [key]</td><td>Reset configuration to defaults</td></tr>
+            <tr><td>offleash doctor</td><td>Diagnose environment issues</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="footer-links">
+    <a href="https://github.com/micaelillos/offleash" target="_blank" rel="noopener">GitHub</a>
+    <a href="https://www.npmjs.com/package/offleash" target="_blank" rel="noopener">npm</a>
+  </div>
+  <p>MIT License</p>
+</footer>
+
+<script>
+  // Copy to clipboard
+  function copyText(text, btn) {
+    navigator.clipboard.writeText(text).then(function() {
+      var prev = btn.textContent;
+      btn.textContent = "Copied!";
+      setTimeout(function() { btn.textContent = prev; }, 1500);
+    });
+  }
+
+  // Typing animation
+  (function() {
+    var prompts = [
+      '"fix the login bug and add tests"',
+      '"refactor the auth module"',
+      '--file spec.pdf "implement this API"',
+      '--auto-commit "add dark mode"',
+      '--print "list all API endpoints"',
+      '"make it faster"',
+    ];
+    var el = document.getElementById("typed-text");
+    if (!el) return;
+    var pi = 0, ci = 0, deleting = false, pause = 0;
+
+    function tick() {
+      if (pause > 0) { pause--; requestAnimationFrame(tick); return; }
+      var current = prompts[pi];
+      if (!deleting) {
+        ci++;
+        el.textContent = current.substring(0, ci);
+        if (ci >= current.length) { deleting = true; pause = 90; }
+        else { pause = 2; }
+      } else {
+        ci--;
+        el.textContent = current.substring(0, ci);
+        if (ci <= 0) { deleting = false; pi = (pi + 1) % prompts.length; pause = 15; }
+        else { pause = 1; }
+      }
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  })();
+</script>
+
+</body>
+</html>
